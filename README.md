@@ -26,4 +26,4 @@ API username and key are defined in the .env file and passed to the Python app v
 ## To Do
 - Add logic to obtain game icon image, and embed it into the .png
 - Add caching with a CDN to ease up on bandwidth usage and API hits
-- Actually l Python and web app development to figure out how to do the above lol
+- Actually learn Python and web app development to figure out how to do the above lol
