@@ -4,6 +4,7 @@ import json
 import hashlib
 import requests
 import email.utils
+import threading
 from flask import Flask, send_file, abort, make_response, request
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -18,22 +19,39 @@ RA_API_KEY = os.getenv("RA_API_KEY")
 app = Flask(__name__)
 
 # Constants
-CACHE_TTL = 120               # Image cache TTL (seconds)
-API_CACHE_TTL = 120           # API response cache TTL
+CACHE_TTL = 120
+API_CACHE_TTL = 120
 CACHE_DIR = "./cache"
 API_CACHE_DIR = "./api_cache"
 BACKGROUND_PATH = "./background.png"
 FONT_PATH = "./Pixellari.ttf"
 
-# Ensure required directories exist
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(API_CACHE_DIR, exist_ok=True)
 
+# In-memory locks
+profile_locks = {}
+global_api_lock = threading.Lock()
+
+def get_profile_lock(username):
+    if username not in profile_locks:
+        profile_locks[username] = threading.Lock()
+    return profile_locks[username]
+
+def safe_request(url, params, max_retries=3, delay=0.5):
+    """Serializes access to RA API to avoid rate limits."""
+    for attempt in range(max_retries):
+        with global_api_lock:
+            try:
+                resp = requests.get(url, params=params, timeout=5).json()
+                if "Error" not in resp and resp:
+                    return resp
+            except Exception as e:
+                print(f"RA API error ({url}): {e}")
+        time.sleep(delay * (attempt + 1))  # backoff: 0.5s, 1s, 1.5s
+    return None
+
 class GamerProfile:
-    """
-    Represents a RetroAchievements user profile.
-    Handles API data retrieval and caching.
-    """
     def __init__(self, username):
         self.username = username
         self.user_data = {}
@@ -42,7 +60,6 @@ class GamerProfile:
         self.valid = self.fetch_data()
 
     def fetch_data(self):
-        """Fetches and caches profile, awards, and game data from RA API."""
         cache_path = os.path.join(API_CACHE_DIR, f"{self.username}.json")
 
         # Load from cache if fresh
@@ -57,49 +74,64 @@ class GamerProfile:
                         self.game_data = data.get("game_data", {})
                         return True
                 except Exception as e:
-                    print(f"Failed to load cached API data: {e}")
+                    print(f"Failed to load cache: {e}")
 
-        # Fetch live data from RA API
-        try:
-            self.user_data = requests.get(
+        # Lock this username to avoid concurrent fetches
+        with get_profile_lock(self.username):
+            # Re-check cache inside lock
+            if os.path.exists(cache_path):
+                age = time.time() - os.path.getmtime(cache_path)
+                if age < API_CACHE_TTL:
+                    try:
+                        with open(cache_path, "r") as f:
+                            data = json.load(f)
+                            self.user_data = data["user_data"]
+                            self.awards_data = data["awards_data"]
+                            self.game_data = data.get("game_data", {})
+                            return True
+                    except Exception:
+                        pass
+
+            # Fetch from RA API with retries + global throttle
+            self.user_data = safe_request(
                 f"https://retroachievements.org/API/API_GetUserProfile.php?u={self.username}",
-                params={"z": RA_API_USERNAME, "y": RA_API_KEY}
-            ).json()
-            if "Error" in self.user_data:
+                {"z": RA_API_USERNAME, "y": RA_API_KEY}
+            )
+            if not self.user_data:
                 return False
 
-            self.awards_data = requests.get(
+            self.awards_data = safe_request(
                 f"https://retroachievements.org/API/API_GetUserAwards.php?u={self.username}",
-                params={"z": RA_API_USERNAME, "y": RA_API_KEY}
-            ).json()
+                {"z": RA_API_USERNAME, "y": RA_API_KEY}
+            )
+            if not self.awards_data:
+                return False
 
-            last_game_id = self.user_data.get("LastGameID")
             self.game_data = {}
+            last_game_id = self.user_data.get("LastGameID")
             if last_game_id:
-                self.game_data = requests.get(
+                self.game_data = safe_request(
                     f"https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?g={last_game_id}&u={self.username}",
-                    params={"z": RA_API_USERNAME, "y": RA_API_KEY}
-                ).json()
+                    {"z": RA_API_USERNAME, "y": RA_API_KEY}
+                ) or {}
 
             # Save to cache
-            with open(cache_path, "w") as f:
-                json.dump({
-                    "user_data": self.user_data,
-                    "awards_data": self.awards_data,
-                    "game_data": self.game_data
-                }, f)
+            try:
+                with open(cache_path, "w") as f:
+                    json.dump({
+                        "user_data": self.user_data,
+                        "awards_data": self.awards_data,
+                        "game_data": self.game_data
+                    }, f)
+            except Exception as e:
+                print(f"Cache write failed: {e}")
 
             return True
-
-        except Exception as e:
-            print(f"Error fetching from RA API: {e}")
-            return False
 
     def mastery_count(self):
         return self.awards_data.get("MasteryAwardsCount", "0")
 
 def generate_signature_image(profile: GamerProfile, output_path=None):
-    """Creates and saves or returns the badge image for a user."""
     try:
         img = Image.open(BACKGROUND_PATH).convert("RGBA")
     except IOError:
@@ -135,77 +167,59 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
         return img_io
 
 def calculate_etag(path):
-    """Generate MD5 hash of file contents for ETag."""
     with open(path, 'rb') as f:
         return hashlib.md5(f.read()).hexdigest()
 
 @app.route("/users/<username>.png")
 def serve_signature(username):
-    """
-    Serves a badge image with caching, ETag, and conditional 304 support.
-    """
     cache_path = os.path.join(CACHE_DIR, f"{username}.png")
 
-    # Serve from cache if fresh
     if os.path.exists(cache_path):
         age = time.time() - os.path.getmtime(cache_path)
         if age < CACHE_TTL:
             etag = calculate_etag(cache_path)
             last_modified = email.utils.formatdate(os.path.getmtime(cache_path), usegmt=True)
 
-            # Conditional GET: respond with 304 if nothing changed
             if (
                 request.headers.get("If-None-Match") == etag or
                 request.headers.get("If-Modified-Since") == last_modified
             ):
                 return '', 304
 
-            # Serve cached image with cache headers
             response = make_response(send_file(cache_path, mimetype="image/png"))
             response.headers["Cache-Control"] = f"public, max-age={CACHE_TTL}"
             response.headers["Last-Modified"] = last_modified
             response.headers["ETag"] = etag
             return response
 
-    # Cache miss or expired — generate new
     profile = GamerProfile(username)
     if not profile.valid:
         abort(404)
 
     generate_signature_image(profile, output_path=cache_path)
-    return serve_signature(username)  # recursive to apply headers
+    return serve_signature(username)
 
-@app.route("/invalidate/<username>", methods=["POST", "GET"])
+@app.route("/invalidate/<username>", methods=["GET", "POST"])
 def invalidate_cache(username):
-    """
-    Clears cached image and API data for a user.
-    Useful for testing, debugging, or on-demand refresh.
-    """
-    files_deleted = []
-
-    image_path = os.path.join(CACHE_DIR, f"{username}.png")
-    api_path = os.path.join(API_CACHE_DIR, f"{username}.json")
-
-    for path in [image_path, api_path]:
+    deleted = []
+    for path in [
+        os.path.join(CACHE_DIR, f"{username}.png"),
+        os.path.join(API_CACHE_DIR, f"{username}.json")
+    ]:
         if os.path.exists(path):
             try:
                 os.remove(path)
-                files_deleted.append(path)
+                deleted.append(path)
             except Exception as e:
                 return f"Error deleting {path}: {e}", 500
 
-    if not files_deleted:
+    if not deleted:
         return f"No cache files found for '{username}'.", 404
+    return f"Cleared: {', '.join(deleted)}", 200
 
-    return f"Cleared: {', '.join(files_deleted)}", 200
-
-@app.route("/invalidate_all", methods=["POST", "GET"])
+@app.route("/invalidate_all", methods=["GET", "POST"])
 def invalidate_all_cache():
-    """
-    Clears all cached images and API JSON files.
-    """
     deleted = []
-
     for dir_path, ext in [(CACHE_DIR, ".png"), (API_CACHE_DIR, ".json")]:
         for filename in os.listdir(dir_path):
             if filename.endswith(ext):
@@ -218,8 +232,7 @@ def invalidate_all_cache():
 
     if not deleted:
         return "No cached files found.", 404
-
     return f"Cleared {len(deleted)} files:\n" + "\n".join(deleted), 200
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="127.0.0.1", port=5000, debug=True)
