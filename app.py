@@ -159,10 +159,10 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
         draw.text((10, 160), f"Currently: {u.get('RichPresenceMsg', 'N/A')}", font=font_small, fill=(128, 255, 128))
 
     if output_path:
-        img.save(output_path, "PNG")
+        img.save(output_path, "PNG", optimize=True)
     else:
         img_io = BytesIO()
-        img.save(img_io, "PNG")
+        img.save(img_io, "PNG", optimize=True)
         img_io.seek(0)
         return img_io
 
