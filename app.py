@@ -182,6 +182,15 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
             except Exception as e:
                 print(f"Failed to load ImageIcon: {e}")
 
+        # Overlay softcore.png if user has softcore points
+    try:
+        softcore_points = int(u.get('TotalSoftcorePoints', '0'))
+        if softcore_points > 0:
+            softcore_overlay = Image.open("./softcore.png").convert("RGBA")
+            img.alpha_composite(softcore_overlay)
+    except Exception as e:
+        print(f"Failed to overlay softcore.png: {e}")
+
     if output_path:
         img.save(output_path, "PNG", optimize=True)
     else:
