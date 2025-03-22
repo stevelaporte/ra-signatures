@@ -5,6 +5,7 @@ import hashlib
 import requests
 import email.utils
 import threading
+import random
 from flask import Flask, send_file, abort, make_response, request
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -23,7 +24,6 @@ CACHE_TTL = 120
 API_CACHE_TTL = 120
 CACHE_DIR = "./cache"
 API_CACHE_DIR = "./api_cache"
-BACKGROUND_PATH = "./background.png"
 FONT_PATH = "./Pixellari.ttf"
 
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -39,7 +39,6 @@ def get_profile_lock(username):
     return profile_locks[username]
 
 def safe_request(url, params, max_retries=3, delay=0.5):
-    """Serializes access to RA API to avoid rate limits."""
     for attempt in range(max_retries):
         with global_api_lock:
             try:
@@ -48,7 +47,7 @@ def safe_request(url, params, max_retries=3, delay=0.5):
                     return resp
             except Exception as e:
                 print(f"RA API error ({url}): {e}")
-        time.sleep(delay * (attempt + 1))  # backoff: 0.5s, 1s, 1.5s
+        time.sleep(delay * (attempt + 1))
     return None
 
 class GamerProfile:
@@ -62,7 +61,6 @@ class GamerProfile:
     def fetch_data(self):
         cache_path = os.path.join(API_CACHE_DIR, f"{self.username}.json")
 
-        # Load from cache if fresh
         if os.path.exists(cache_path):
             age = time.time() - os.path.getmtime(cache_path)
             if age < API_CACHE_TTL:
@@ -76,9 +74,7 @@ class GamerProfile:
                 except Exception as e:
                     print(f"Failed to load cache: {e}")
 
-        # Lock this username to avoid concurrent fetches
         with get_profile_lock(self.username):
-            # Re-check cache inside lock
             if os.path.exists(cache_path):
                 age = time.time() - os.path.getmtime(cache_path)
                 if age < API_CACHE_TTL:
@@ -92,7 +88,6 @@ class GamerProfile:
                     except Exception:
                         pass
 
-            # Fetch from RA API with retries + global throttle
             self.user_data = safe_request(
                 f"https://retroachievements.org/API/API_GetUserProfile.php?u={self.username}",
                 {"z": RA_API_USERNAME, "y": RA_API_KEY}
@@ -115,7 +110,6 @@ class GamerProfile:
                     {"z": RA_API_USERNAME, "y": RA_API_KEY}
                 ) or {}
 
-            # Save to cache
             try:
                 with open(cache_path, "w") as f:
                     json.dump({
@@ -132,8 +126,9 @@ class GamerProfile:
         return self.awards_data.get("MasteryAwardsCount", "0")
 
 def generate_signature_image(profile: GamerProfile, output_path=None):
+    background_file = f"./background{random.randint(1, 12):02}.png"
     try:
-        img = Image.open(BACKGROUND_PATH).convert("RGBA")
+        img = Image.open(background_file).convert("RGBA")
     except IOError:
         img = Image.new("RGBA", (768, 192), (30, 30, 30, 255))
 
@@ -154,7 +149,13 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
     draw.text((10, 80), f"Games Mastered: {m}", font=font_small, fill=(255, 255, 255))
 
     if g:
-        draw.text((10, 105), f"Now Playing: {g.get('Title', 'Unknown')}", font=font_large, fill=(128, 255, 128))
+        now_playing_text = f"Now Playing: {g.get('Title', 'Unknown')}"
+        text_width = draw.textlength(now_playing_text, font=font_large)
+        if text_width > img.width - 20:
+            draw.text((10, 120), now_playing_text, font=font_small, fill=(128, 255, 128))
+        else:
+            draw.text((10, 105), now_playing_text, font=font_large, fill=(128, 255, 128))
+
         draw.text((10, 140), f"Platform: {g.get('ConsoleName', 'N/A')}", font=font_small, fill=(128, 255, 128))
         draw.text((10, 160), f"Currently: {u.get('RichPresenceMsg', 'N/A')}", font=font_small, fill=(128, 255, 128))
 
