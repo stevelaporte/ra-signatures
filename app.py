@@ -152,12 +152,28 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
         now_playing_text = f"Now Playing: {g.get('Title', 'Unknown')}"
         text_width = draw.textlength(now_playing_text, font=font_large)
         if text_width > img.width - 20:
-            draw.text((10, 120), now_playing_text, font=font_small, fill=(128, 255, 128))
+            now_playing_y = 120
+            draw.text((10, now_playing_y), now_playing_text, font=font_small, fill=(128, 255, 128))
         else:
-            draw.text((10, 105), now_playing_text, font=font_large, fill=(128, 255, 128))
+            now_playing_y = 105
+            draw.text((10, now_playing_y), now_playing_text, font=font_large, fill=(128, 255, 128))
 
         draw.text((10, 140), f"Platform: {g.get('ConsoleName', 'N/A')}", font=font_small, fill=(128, 255, 128))
         draw.text((10, 160), f"Currently: {u.get('RichPresenceMsg', 'N/A')}", font=font_small, fill=(128, 255, 128))
+
+        # Try to add game icon (ImageIcon URL)
+        icon_path = g.get("ImageIcon")
+        icon_url = f"https://retroachievements.org{icon_path}" if icon_path else None
+        if icon_url:
+            try:
+                icon_resp = requests.get(icon_url, timeout=5)
+                if icon_resp.status_code == 200:
+                    icon_img = Image.open(BytesIO(icon_resp.content)).convert("RGBA")
+                    icon_x = img.width - icon_img.width - 10
+                    icon_y = (img.height - icon_img.height) // 2
+                    img.paste(icon_img, (icon_x, icon_y), icon_img)
+            except Exception as e:
+                print(f"Failed to load ImageIcon: {e}")
 
     if output_path:
         img.save(output_path, "PNG", optimize=True)
