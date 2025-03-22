@@ -171,6 +171,13 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
                     icon_img = Image.open(BytesIO(icon_resp.content)).convert("RGBA")
                     icon_x = img.width - icon_img.width - 10
                     icon_y = (img.height - icon_img.height) // 2
+                    # Draw green border around the icon
+                    border_color = (128, 255, 128)
+                    border_box = [
+                        (icon_x - 1, icon_y - 1),
+                        (icon_x + icon_img.width, icon_y + icon_img.height)
+                    ]
+                    draw.rectangle(border_box, outline=border_color)
                     img.paste(icon_img, (icon_x, icon_y), icon_img)
             except Exception as e:
                 print(f"Failed to load ImageIcon: {e}")
