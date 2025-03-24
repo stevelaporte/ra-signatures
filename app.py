@@ -20,8 +20,8 @@ RA_API_KEY = os.getenv("RA_API_KEY")
 app = Flask(__name__)
 
 # Constants
-CACHE_TTL = 120
-API_CACHE_TTL = 120
+CACHE_TTL = 300
+API_CACHE_TTL = 300
 CACHE_DIR = "./cache"
 API_CACHE_DIR = "./api_cache"
 FONT_PATH = "./Pixellari.ttf"
@@ -126,7 +126,7 @@ class GamerProfile:
         return self.awards_data.get("MasteryAwardsCount", "0")
 
 def generate_signature_image(profile: GamerProfile, output_path=None):
-    background_file = f"./background{random.randint(1, 12):02}.png"
+    background_file = f"./background{random.randint(1, 26):02}.png"
     try:
         img = Image.open(background_file).convert("RGBA")
     except IOError:
@@ -267,5 +267,7 @@ def invalidate_all_cache():
         return "No cached files found.", 404
     return f"Cleared {len(deleted)} files:\n" + "\n".join(deleted), 200
 
-if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+# Disabling built-in Flask dev server block
+#if __name__ == "__main__":
+#    app.run(host="127.0.0.1", port=5000)
+# Gunicorn entrypoint
