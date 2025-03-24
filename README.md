@@ -1,7 +1,7 @@
 # ra-signatures
 Dynamically generate a .png file with RetroAchievements profile info, hosted at an unchanging URL - useful for embeds, e.g. forum signatures.
 
-![example](https://github.com/tmfc666/ra-signatures/blob/main/example.png)
+![example](https://raw.githubusercontent.com/tmfc666/ra-signatures/refs/heads/main/example.png)
 
 ## Requirements
 
