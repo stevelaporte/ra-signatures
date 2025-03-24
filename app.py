@@ -126,7 +126,7 @@ class GamerProfile:
         return self.awards_data.get("MasteryAwardsCount", "0")
 
 def generate_signature_image(profile: GamerProfile, output_path=None):
-    background_file = f"./background{random.randint(1, 26):02}.png"
+    background_file = f"./backgrounds/background{random.randint(1, 26):02}.png"
     try:
         img = Image.open(background_file).convert("RGBA")
     except IOError:
@@ -159,7 +159,21 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
             draw.text((10, now_playing_y), now_playing_text, font=font_large, fill=(128, 255, 128))
 
         draw.text((10, 140), f"Platform: {g.get('ConsoleName', 'N/A')}", font=font_small, fill=(128, 255, 128))
-        draw.text((10, 160), f"Currently: {u.get('RichPresenceMsg', 'N/A')}", font=font_small, fill=(128, 255, 128))
+
+        prefix = "Currently: "
+        rich_msg = u.get('RichPresenceMsg', 'N/A')
+        max_width = 763 - 10  # right margin minus left padding
+
+        full_text = prefix + rich_msg
+        if draw.textlength(full_text, font=font_small) > max_width:
+            # Truncate RichPresenceMsg to fit with ellipsis
+            for i in range(len(rich_msg), 0, -1):
+                test_text = prefix + rich_msg[:i].rstrip() + "..."
+                if draw.textlength(test_text, font=font_small) <= max_width:
+                    full_text = test_text
+                    break
+
+        draw.text((10, 160), full_text, font=font_small, fill=(128, 255, 128))
 
         # Try to add game icon (ImageIcon URL)
         icon_path = g.get("ImageIcon")
@@ -170,7 +184,7 @@ def generate_signature_image(profile: GamerProfile, output_path=None):
                 if icon_resp.status_code == 200:
                     icon_img = Image.open(BytesIO(icon_resp.content)).convert("RGBA")
                     icon_x = img.width - icon_img.width - 10
-                    icon_y = (img.height - icon_img.height) // 2
+                    icon_y = 5
                     # Draw green border around the icon
                     border_color = (128, 255, 128)
                     border_box = [
