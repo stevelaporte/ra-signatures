@@ -86,9 +86,6 @@ server {
 
 ## To Do (last updated 2025-03-24):
 - Aesthetic tweaks
-  - Move game icon up (justify with top of username field)
-  - Add overflow exception for rich presence text (e.g. truncate with "..." if too long)
   - Add more backgrounds
 - Organizational tasks
-  - Move backgrounds to their own directory and update code accordingly
   - Move other parameters to .env file (e.g. cache TTLs)
