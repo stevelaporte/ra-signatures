@@ -25,7 +25,7 @@ python-dotenv
 API username and key are defined in the .env file and passed to the Python app via python-dotenv. The code is configured to only allow one request at a time, and I'd recommend running this with only one worker and one thread in Gunicorn to avoid tripping the RetroAchievements API rate limit. I also highly recommend adding CDN caching via Cloudflare or similar as this will greatly improve performance and reduce GET requests to your app and API requests to RetroAchievements.
 
 ## Running as a Service - Example
-You can configure this to run as a service. Here's an example for running this as a systemd service on Ubuntu, assuming the app and venv are installed in `/opt/ra-signaures/`. Substitute `username` with the username of the user that will run the service (I recommend creating a dedicated non-root service account for this):
+You can configure this to run as a service. Here's an example for running this as a systemd service on Ubuntu, assuming the app and venv are installed in `/opt/ra-signaures/`. Substitute `<username_here>` with the username of the user that will run the service (I recommend creating a dedicated non-root service account for this):
 
 ### `/etc/systemd/system/ra-signatures.service`
 ```
