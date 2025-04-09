@@ -1,7 +1,9 @@
 # ra-signatures
-Dynamically generate a .png file with RetroAchievements profile info, hosted at an unchanging URL - useful for embeds, e.g. forum signatures.
+Dynamically generate a .png file with RetroAchievements profile info, hosted at an unchanging URL - useful for embeds, e.g. forum signatures. The idea is that you'd have an image that lives at `https://ra.site.com/users/MyRetroAchievementsUsername.png` that dynamically updates itself when the GET request is made. This way, you can have a forum signature that always has up-to-date info about the game you're playing and totals for points and games mastered, displayed in a neat little graphic. Here's what it looks like:
 
 ![example](https://raw.githubusercontent.com/tmfc666/ra-signatures/refs/heads/main/example.png)
+
+The included font is **Pixellari** by [Zacchary Dempsey-Plante](https://ztdp.ca/). You can grab it for free at [DaFont](https://www.dafont.com/pixellari.font) (or via this repo), but please make sure you attribute him for making such a slick bitmap / pixel font and making it totally free, like I've done here. Background art is included, but see below for more info on how to change it. 
 
 ## Requirements
 
@@ -10,9 +12,9 @@ Dynamically generate a .png file with RetroAchievements profile info, hosted at 
 python3
 python3-venv
 python3-pip
-nginx                  # if placing behind a reverse proxy
+nginx                  # for reverse proxy
 certbot                # for SSL certs, if proxying
-python3-certbot-nginx  # ditto
+python3-certbot-nginx  # 
 
 ```
 ### Python dependencies
@@ -23,6 +25,15 @@ requests
 pillow
 python-dotenv
 ```
+
+### Background Images
+The repo includes a set of background images that are ...reminiscent... of many classic NES, SNES, and Genesis games. Feel free to swap these out with your own, but keep the filenames consistent (`background##.png`). You can increase or decrease the number of backgrounds that are chosen by updating the relevant portion of the `generate_signature_image` function in `app.py` (change the `26` to whatever your highest incremented .png filename is):
+
+```
+def generate_signature_image(profile: GamerProfile, output_path=None):
+    background_file = f"./backgrounds/background{random.randint(1, 26):02}.png"
+```
+
 ## RetroAchievements API Access
 API username and key are defined in the .env file and passed to the Python app via python-dotenv. The code is configured to only allow one request at a time, and I'd recommend running this with only one worker and one thread in Gunicorn to avoid tripping the RetroAchievements API rate limit. I also highly recommend adding CDN caching via Cloudflare or similar as this will greatly improve performance and reduce GET requests to your app and API requests to RetroAchievements.
 
@@ -84,8 +95,15 @@ server {
 }
 ```
 
-## To Do (last updated 2025-03-24):
-- Aesthetic tweaks
+## To Do (last updated 2025-04-08):
+- **Functional tweaks:**
+  - Improve logic for selecting a random background image (e.g. by importing `random`, utilizing `random.choice()`, and adding per-run seeding and/or logic to prevent repeats across calls)
+ 
+- **Aesthetic tweaks:**
   - Add more backgrounds
-- Organizational tasks
+  - Add console icons from RA
+  - Explore other fonts with emoji/unicode glyph support (to improve rich presence text appearance; see example image above.)
+
+- **Organizational tweaks:**
   - Move other parameters to .env file (e.g. cache TTLs)
+  - Break app out into multiple .py files for best practices
