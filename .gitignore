@@ -172,3 +172,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# --- ra-signatures: secrets, runtime state, and local-only customizations ---
+.env
+cache/
+api_cache/
+overrides.py
+overrides/
+softcore.png
+
+# Custom backgrounds stay local; only the bundled *_default.png placeholders are tracked
+backgrounds/*
+!backgrounds/*_default.png
