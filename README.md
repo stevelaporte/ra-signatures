@@ -72,7 +72,7 @@ requests
 ## Installation
 
 ```bash
-sudo git clone https://github.com/tmfc666/ra-signatures.git /opt/ra-signatures
+sudo git clone https://github.com/stevelaporte/ra-signatures.git /opt/ra-signatures
 cd /opt/ra-signatures
 sudo python3 -m venv venv
 sudo venv/bin/pip install -r requirements.txt
